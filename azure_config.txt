@@ -1,0 +1,77 @@
+# Azure Web App Configuration for Stock Recommendation System
+
+## Startup Command Options
+
+You have several options for the startup command in Azure Web App:
+
+### Option 1: Simple Uvicorn Command (Recommended)
+```bash
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+### Option 2: Using Azure Startup Script
+```bash
+bash azure_startup.sh
+```
+
+### Option 3: Using Python Startup Script
+```bash
+python azure_startup.py
+```
+
+### Option 4: Using Gunicorn (Production)
+```bash
+gunicorn -w 2 -k uvicorn.workers.UvicornWorker app.main:app --bind 0.0.0.0:8000
+```
+
+## Azure Web App Settings
+
+Configure these in Azure Portal > Configuration > Application Settings:
+
+```
+WEBSITES_PORT=8000
+SCM_DO_BUILD_DURING_DEPLOYMENT=1
+PYTHONPATH=/home/site/wwwroot
+WEBSITE_RUN_FROM_PACKAGE=1
+```
+
+## Environment Variables
+
+Add these to Azure Web App Configuration:
+
+```
+REDIS_URL=redis://localhost:6379/0
+DATABASE_URL=sqlite:///./data/stocks.db
+CACHE_TTL=300
+LOG_LEVEL=INFO
+DEBUG=False
+```
+
+## Recommended Startup Command for Azure
+
+**Use this startup command in Azure Web App:**
+
+```bash
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+```
+
+## Troubleshooting
+
+If the app still fails to start:
+
+1. Check the Python version is correct (3.11+)
+2. Ensure all dependencies are in requirements.txt
+3. Verify the app structure is correct
+4. Check Azure logs for specific error messages
+
+## File Structure Expected by Azure
+
+```
+/home/site/wwwroot/
+├── app/
+│   ├── __init__.py
+│   ├── main.py
+│   └── ...
+├── requirements.txt
+└── startup files
+```

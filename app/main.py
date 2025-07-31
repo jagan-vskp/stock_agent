@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import logging
+from datetime import datetime
 from app.core.config import settings
 from app.api.v1.routes import api_router
 from app.core.database import engine, Base
@@ -46,7 +47,26 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "stock-recommendation-system"}
+    """Health check endpoint for Azure App Service"""
+    try:
+        # Test database connection
+        from app.core.database import engine
+        connection = engine.connect()
+        connection.close()
+        
+        return {
+            "status": "healthy", 
+            "service": "stock-recommendation-system",
+            "database": "connected",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "service": "stock-recommendation-system", 
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
 
 if __name__ == "__main__":
     uvicorn.run(
