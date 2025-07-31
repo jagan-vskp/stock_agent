@@ -205,27 +205,71 @@ def analyze_stock(app, symbol, analysis_type, period):
         
         data = analysis_result["data"]
         
-        # Display stock information
+        # Display stock information header
         display_stock_header(data)
         
-        # Create columns for different analysis types
-        col1, col2 = st.columns(2)
+        # Show comprehensive analysis first if available
+        if analysis_type == "comprehensive" and data.get("comprehensive_score"):
+            display_comprehensive_analysis(data)
+            st.divider()
         
-        with col1:
-            # Fundamental analysis
-            if "fundamental" in data:
+        # Create tabs for different analysis types
+        available_analyses = []
+        if data.get("fundamental") and not data["fundamental"].get("error"):
+            available_analyses.append("Fundamental")
+        if data.get("technical") and not data["technical"].get("error"):
+            available_analyses.append("Technical")
+        if data.get("sentiment") and not data["sentiment"].get("error"):
+            available_analyses.append("Sentiment")
+        if data.get("ml_prediction") and not data["ml_prediction"].get("error"):
+            available_analyses.append("ML Prediction")
+        
+        if len(available_analyses) > 1:
+            tabs = st.tabs(available_analyses + ["📊 Historical Chart"])
+            
+            tab_index = 0
+            
+            # Fundamental analysis tab
+            if "Fundamental" in available_analyses:
+                with tabs[tab_index]:
+                    display_fundamental_analysis(data["fundamental"])
+                tab_index += 1
+            
+            # Technical analysis tab
+            if "Technical" in available_analyses:
+                with tabs[tab_index]:
+                    display_technical_analysis(data["technical"])
+                tab_index += 1
+            
+            # Sentiment analysis tab
+            if "Sentiment" in available_analyses:
+                with tabs[tab_index]:
+                    display_sentiment_analysis(data["sentiment"])
+                tab_index += 1
+            
+            # ML Prediction tab
+            if "ML Prediction" in available_analyses:
+                with tabs[tab_index]:
+                    display_ml_prediction(data["ml_prediction"])
+                tab_index += 1
+            
+            # Historical chart tab
+            with tabs[tab_index]:
+                display_historical_chart(app, symbol, period)
+        
+        else:
+            # Single analysis type
+            if data.get("fundamental") and not data["fundamental"].get("error"):
                 display_fundamental_analysis(data["fundamental"])
-            
-            # Technical analysis
-            if "technical" in data:
+            elif data.get("technical") and not data["technical"].get("error"):
                 display_technical_analysis(data["technical"])
-        
-        with col2:
-            # Sentiment analysis
-            if "sentiment" in data:
+            elif data.get("sentiment") and not data["sentiment"].get("error"):
                 display_sentiment_analysis(data["sentiment"])
+            elif data.get("ml_prediction") and not data["ml_prediction"].get("error"):
+                display_ml_prediction(data["ml_prediction"])
             
-            # Historical chart
+            # Always show historical chart
+            st.divider()
             display_historical_chart(app, symbol, period)
 
 def display_stock_header(data):
@@ -265,7 +309,7 @@ def display_stock_header(data):
         )
 
 def display_fundamental_analysis(fundamental_data):
-    """Display fundamental analysis results"""
+    """Display enhanced fundamental analysis results"""
     st.subheader("📊 Fundamental Analysis")
     
     overall_score = fundamental_data.get("overall_score", 0)
@@ -279,70 +323,157 @@ def display_fundamental_analysis(fundamental_data):
     else:
         st.markdown(f'<div class="recommendation-hold">🟡 {recommendation}</div>', unsafe_allow_html=True)
     
-    # Overall score
-    st.metric("Overall Score", f"{overall_score:.1f}/100")
+    # Overall score with progress bar
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.metric("Overall Score", f"{overall_score:.1f}/100")
+    with col2:
+        st.progress(overall_score / 100)
     
-    # Progress bar for score
-    st.progress(overall_score / 100)
-    
-    # Key metrics
+    # Key metrics in expandable sections
     fund_data = fundamental_data.get("fundamental_data", {})
     scores = fundamental_data.get("scores", {})
     
-    col1, col2 = st.columns(2)
+    with st.expander("📈 Key Financial Ratios"):
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if fund_data.get("pe_ratio"):
+                st.metric("P/E Ratio", f"{fund_data['pe_ratio']:.2f}")
+            if fund_data.get("eps"):
+                st.metric("EPS", f"₹{fund_data['eps']:.2f}")
+        
+        with col2:
+            if fund_data.get("roe"):
+                roe_pct = fund_data['roe'] * 100 if fund_data['roe'] < 1 else fund_data['roe']
+                st.metric("ROE", f"{roe_pct:.1f}%")
+            if fund_data.get("debt_to_equity"):
+                st.metric("Debt/Equity", f"{fund_data['debt_to_equity']:.2f}")
+        
+        with col3:
+            if fund_data.get("profit_margin"):
+                margin_pct = fund_data['profit_margin'] * 100 if fund_data['profit_margin'] < 1 else fund_data['profit_margin']
+                st.metric("Profit Margin", f"{margin_pct:.1f}%")
+            if fund_data.get("dividend_yield"):
+                div_pct = fund_data['dividend_yield'] * 100 if fund_data['dividend_yield'] < 1 else fund_data['dividend_yield']
+                st.metric("Dividend Yield", f"{div_pct:.2f}%")
     
-    with col1:
-        st.write("**Key Ratios:**")
-        if fund_data.get("pe_ratio"):
-            st.write(f"• P/E Ratio: {fund_data['pe_ratio']:.2f}")
-        if fund_data.get("eps"):
-            st.write(f"• EPS: ₹{fund_data['eps']:.2f}")
-        if fund_data.get("debt_to_equity"):
-            st.write(f"• Debt/Equity: {fund_data['debt_to_equity']:.2f}")
+    with st.expander("🎯 Scoring Breakdown"):
+        if scores:
+            score_df = pd.DataFrame([
+                {"Metric": metric.replace("_score", "").replace("_", " ").title(), 
+                 "Score": f"{score:.0f}/100"}
+                for metric, score in scores.items()
+            ])
+            st.table(score_df)
     
-    with col2:
-        st.write("**Scores:**")
-        for metric, score in scores.items():
-            metric_name = metric.replace("_score", "").replace("_", " ").title()
-            st.write(f"• {metric_name}: {score:.0f}/100")
-    
-    # Insights
+    # Enhanced insights
     insights = fundamental_data.get("insights", [])
     if insights:
         st.write("**💡 Key Insights:**")
-        for insight in insights:
-            st.write(f"• {insight}")
+        for i, insight in enumerate(insights, 1):
+            st.write(f"{i}. {insight}")
 
 def display_technical_analysis(technical_data):
-    """Display technical analysis results"""
+    """Display enhanced technical analysis results"""
     st.subheader("📈 Technical Analysis")
     
-    col1, col2 = st.columns(2)
+    if technical_data.get("error"):
+        st.error(f"Technical Analysis Error: {technical_data['error']}")
+        return
     
+    overall_score = technical_data.get("overall_score", 50)
+    recommendation = technical_data.get("recommendation", "HOLD")
+    indicators = technical_data.get("indicators", {})
+    signals = technical_data.get("signals", {})
+    
+    # Recommendation and score
+    col1, col2 = st.columns(2)
     with col1:
-        if technical_data.get("rsi"):
-            st.metric("RSI", f"{technical_data['rsi']:.1f}")
+        if recommendation == "BUY":
+            st.success(f"🟢 {recommendation}")
+        elif recommendation == "SELL":
+            st.error(f"🔴 {recommendation}")
+        else:
+            st.warning(f"🟡 {recommendation}")
     
     with col2:
-        if technical_data.get("macd"):
-            st.metric("MACD", f"{technical_data['macd']:.2f}")
+        st.metric("Technical Score", f"{overall_score:.1f}/100")
     
-    if "message" in technical_data:
-        st.info(technical_data["message"])
+    # Technical indicators
+    with st.expander("📊 Technical Indicators"):
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if indicators.get("rsi"):
+                rsi_color = "🟢" if 30 <= indicators["rsi"] <= 70 else "🔴" if indicators["rsi"] > 70 else "🟡"
+                st.metric("RSI", f"{indicators['rsi']:.1f} {rsi_color}")
+            
+            if indicators.get("macd"):
+                st.metric("MACD", f"{indicators['macd']:.3f}")
+        
+        with col2:
+            if indicators.get("sma_20"):
+                st.metric("SMA 20", f"₹{indicators['sma_20']:.2f}")
+            if indicators.get("sma_50"):
+                st.metric("SMA 50", f"₹{indicators['sma_50']:.2f}")
+        
+        with col3:
+            if indicators.get("volume_ratio"):
+                vol_color = "🟢" if indicators["volume_ratio"] > 1.2 else "🔴" if indicators["volume_ratio"] < 0.8 else "🟡"
+                st.metric("Volume Ratio", f"{indicators['volume_ratio']:.2f} {vol_color}")
+            
+            if indicators.get("atr"):
+                st.metric("ATR", f"₹{indicators['atr']:.2f}")
+    
+    # Trading signals
+    with st.expander("⚡ Trading Signals"):
+        if signals:
+            signal_df = pd.DataFrame([
+                {"Indicator": indicator.replace("_signal", "").replace("_", " ").title(),
+                 "Signal": "🟢 " + signal if signal == "BUY" else "🔴 " + signal if signal == "SELL" else "🟡 " + signal}
+                for indicator, signal in signals.items()
+            ])
+            st.table(signal_df)
+    
+    # Support and Resistance
+    if indicators.get("support") and indicators.get("resistance"):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Support Level", f"₹{indicators['support']:.2f}")
+        with col2:
+            st.metric("Resistance Level", f"₹{indicators['resistance']:.2f}")
+    
+    # Technical insights
+    insights = technical_data.get("insights", [])
+    if insights:
+        st.write("**💡 Technical Insights:**")
+        for i, insight in enumerate(insights, 1):
+            st.write(f"{i}. {insight}")
 
 def display_sentiment_analysis(sentiment_data):
-    """Display sentiment analysis results"""
+    """Display enhanced sentiment analysis results"""
     st.subheader("📰 Sentiment Analysis")
     
-    sentiment_score = sentiment_data.get("sentiment_score", 0)
+    if sentiment_data.get("error"):
+        st.error(f"Sentiment Analysis Error: {sentiment_data['error']}")
+        return
+    
+    overall_sentiment = sentiment_data.get("overall_sentiment", {})
+    sentiment_score = overall_sentiment.get("score", 0.5)
+    sentiment_interp = overall_sentiment.get("interpretation", "Neutral")
     news_count = sentiment_data.get("news_count", 0)
     
-    col1, col2 = st.columns(2)
+    # Overall sentiment display
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("Sentiment Score", f"{sentiment_score:.2f}")
+        st.metric("Overall Sentiment", sentiment_interp)
     
     with col2:
+        st.metric("Sentiment Score", f"{sentiment_score:.2f}")
+    
+    with col3:
         st.metric("News Articles", news_count)
     
     # Sentiment gauge
@@ -350,12 +481,12 @@ def display_sentiment_analysis(sentiment_data):
         mode = "gauge+number",
         value = sentiment_score,
         domain = {'x': [0, 1], 'y': [0, 1]},
-        title = {'text': "Sentiment"},
+        title = {'text': "Sentiment Score"},
         gauge = {
             'axis': {'range': [None, 1]},
             'bar': {'color': "darkblue"},
             'steps': [
-                {'range': [0, 0.3], 'color': "lightgray"},
+                {'range': [0, 0.3], 'color': "red"},
                 {'range': [0.3, 0.7], 'color': "yellow"},
                 {'range': [0.7, 1], 'color': "green"}
             ],
@@ -369,6 +500,228 @@ def display_sentiment_analysis(sentiment_data):
     
     fig.update_layout(height=300)
     st.plotly_chart(fig, use_container_width=True)
+    
+    # Detailed sentiment breakdown
+    with st.expander("📊 Sentiment Breakdown"):
+        news_sentiment = sentiment_data.get("news_sentiment", {})
+        social_sentiment = sentiment_data.get("social_sentiment", {})
+        market_sentiment = sentiment_data.get("market_sentiment", {})
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.write("**📰 News Sentiment**")
+            if news_sentiment:
+                st.metric("Score", f"{news_sentiment.get('score', 0):.2f}")
+                st.metric("Positive Articles", news_sentiment.get('positive_articles', 0))
+                st.metric("Negative Articles", news_sentiment.get('negative_articles', 0))
+        
+        with col2:
+            st.write("**💬 Social Sentiment**")
+            if social_sentiment:
+                st.metric("Score", f"{social_sentiment.get('score', 0):.2f}")
+                trend = social_sentiment.get('sentiment_trend', 'neutral')
+                st.write(f"Trend: {trend.title()}")
+        
+        with col3:
+            st.write("**📈 Market Sentiment**")
+            if market_sentiment:
+                st.metric("Score", f"{market_sentiment.get('score', 0):.2f}")
+                trend = market_sentiment.get('market_trend', 'neutral')
+                st.write(f"Market: {trend.title()}")
+    
+    # Sentiment insights
+    insights = sentiment_data.get("insights", [])
+    if insights:
+        st.write("**💡 Sentiment Insights:**")
+        for i, insight in enumerate(insights, 1):
+            st.write(f"{i}. {insight}")
+
+def display_ml_prediction(ml_data):
+    """Display ML prediction analysis"""
+    st.subheader("🤖 ML Target Price Prediction")
+    
+    if ml_data.get("error"):
+        st.error(f"ML Prediction Error: {ml_data['error']}")
+        return
+    
+    current_price = ml_data.get("current_price", 0)
+    price_targets = ml_data.get("price_targets", {})
+    upside_potential = ml_data.get("upside_potential_pct", 0)
+    confidence_metrics = ml_data.get("confidence_metrics", {})
+    risk_level = ml_data.get("risk_level", "Medium")
+    
+    # Key metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Current Price", f"₹{current_price:.2f}")
+    
+    with col2:
+        base_target = price_targets.get("base", current_price)
+        st.metric("Target Price", f"₹{base_target:.2f}")
+    
+    with col3:
+        upside_color = "🟢" if upside_potential > 0 else "🔴"
+        st.metric("Upside Potential", f"{upside_potential:+.1f}% {upside_color}")
+    
+    with col4:
+        overall_confidence = confidence_metrics.get("overall", 0.5) * 100
+        st.metric("Confidence", f"{overall_confidence:.0f}%")
+    
+    # Price targets chart
+    if price_targets:
+        target_df = pd.DataFrame([
+            {"Scenario": scenario.replace("_", " ").title(), "Price": f"₹{price:.2f}", "Value": price}
+            for scenario, price in price_targets.items()
+        ])
+        
+        fig = px.bar(target_df, x="Scenario", y="Value", 
+                    title="ML Price Targets by Scenario",
+                    labels={"Value": "Price (₹)"})
+        fig.add_hline(y=current_price, line_dash="dash", line_color="red", 
+                     annotation_text="Current Price")
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Risk assessment
+    col1, col2 = st.columns(2)
+    with col1:
+        risk_color = "🟢" if risk_level == "Low" else "🟡" if risk_level == "Medium" else "🔴"
+        st.metric("Risk Level", f"{risk_level} {risk_color}")
+    
+    with col2:
+        horizon = ml_data.get("prediction_horizon_days", 30)
+        st.metric("Prediction Horizon", f"{horizon} days")
+    
+    # ML insights
+    insights = ml_data.get("insights", [])
+    if insights:
+        st.write("**💡 ML Insights:**")
+        for i, insight in enumerate(insights, 1):
+            st.write(f"{i}. {insight}")
+
+def display_comprehensive_analysis(data):
+    """Display comprehensive analysis results"""
+    if not data.get("comprehensive_score"):
+        return
+    
+    st.subheader("🎯 Comprehensive Analysis Summary")
+    
+    comprehensive_score = data.get("comprehensive_score", 0.5) * 100
+    final_recommendation = data.get("final_recommendation", {})
+    recommendation = final_recommendation.get("recommendation", "HOLD")
+    confidence = final_recommendation.get("confidence", 0.5) * 100
+    
+    # Overall results
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Overall Score", f"{comprehensive_score:.0f}/100")
+        st.progress(comprehensive_score / 100)
+    
+    with col2:
+        if recommendation == "BUY":
+            st.success(f"🟢 **{recommendation}**")
+        elif recommendation == "SELL":
+            st.error(f"🔴 **{recommendation}**")
+        else:
+            st.warning(f"🟡 **{recommendation}**")
+    
+    with col3:
+        st.metric("Confidence", f"{confidence:.0f}%")
+    
+    # Individual scores
+    individual_scores = data.get("individual_scores", {})
+    if individual_scores:
+        st.write("**📊 Analysis Breakdown:**")
+        score_df = pd.DataFrame([
+            {"Analysis": analysis.replace("_", " ").title(), 
+             "Score": f"{score*100:.0f}/100"}
+            for analysis, score in individual_scores.items()
+        ])
+        st.table(score_df)
+    
+    # Vote breakdown
+    vote_breakdown = final_recommendation.get("vote_breakdown", {})
+    if vote_breakdown:
+        with st.expander("🗳️ Recommendation Consensus"):
+            vote_df = pd.DataFrame([
+                {"Recommendation": rec, "Votes": votes}
+                for rec, votes in vote_breakdown.items()
+            ])
+            fig = px.pie(vote_df, values="Votes", names="Recommendation", 
+                        title="Analysis Methods Consensus")
+            st.plotly_chart(fig, use_container_width=True)
+    
+    # Target price analysis
+    target_price_analysis = data.get("target_price_analysis", {})
+    if target_price_analysis:
+        with st.expander("🎯 Target Price Analysis"):
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                avg_target = target_price_analysis.get("average_target", 0)
+                st.metric("Average Target", f"₹{avg_target:.2f}")
+            
+            with col2:
+                upside_pct = target_price_analysis.get("upside_potential_pct", 0)
+                st.metric("Average Upside", f"{upside_pct:+.1f}%")
+            
+            with col3:
+                target_range = target_price_analysis.get("target_range_pct", 0)
+                st.metric("Price Range", f"{target_range:.1f}%")
+    
+    # Risk assessment
+    risk_assessment = data.get("risk_assessment", {})
+    if risk_assessment:
+        with st.expander("⚠️ Risk Assessment"):
+            risk_level = risk_assessment.get("risk_level", "Medium")
+            risk_factors = risk_assessment.get("risk_factors", [])
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                risk_color = "🟢" if risk_level == "Low" else "🟡" if risk_level == "Medium" else "🔴"
+                st.metric("Risk Level", f"{risk_level} {risk_color}")
+            
+            with col2:
+                recommendation_text = risk_assessment.get("recommendation", "")
+                st.write(f"**Suitability:** {recommendation_text}")
+            
+            if risk_factors:
+                st.write("**Risk Factors:**")
+                for factor in risk_factors:
+                    st.write(f"• {factor}")
+    
+    # Investment thesis
+    investment_thesis = data.get("investment_thesis", {})
+    if investment_thesis:
+        with st.expander("📋 Investment Thesis"):
+            st.write(f"**Summary:** {investment_thesis.get('summary', 'N/A')}")
+            
+            strengths = investment_thesis.get("key_strengths", [])
+            concerns = investment_thesis.get("key_concerns", [])
+            
+            if strengths or concerns:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if strengths:
+                        st.write("**💪 Key Strengths:**")
+                        for strength in strengths:
+                            st.write(f"• {strength}")
+                
+                with col2:
+                    if concerns:
+                        st.write("**⚠️ Key Concerns:**")
+                        for concern in concerns:
+                            st.write(f"• {concern}")
+    
+    # Comprehensive insights
+    comprehensive_insights = data.get("comprehensive_insights", [])
+    if comprehensive_insights:
+        st.write("**💡 Key Insights:**")
+        for i, insight in enumerate(comprehensive_insights, 1):
+            st.write(f"{i}. {insight}")
 
 def display_historical_chart(app, symbol, period):
     """Display historical price chart"""

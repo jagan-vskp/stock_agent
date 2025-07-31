@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # Redis cache service
+  redis:
+    image: redis:7-alpine
+    container_name: stock_agent_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - stock_network
+
+  # Main FastAPI application
+  stock_agent_api:
+    build: .
+    container_name: stock_agent_api
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=sqlite:///./data/stocks.db
+      - CACHE_TTL=300
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - stock_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Streamlit frontend (optional - can be run separately)
+  stock_agent_frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    container_name: stock_agent_frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - API_BASE_URL=http://stock_agent_api:8000
+    depends_on:
+      - stock_agent_api
+    networks:
+      - stock_network
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  stock_network:
+    driver: bridge
